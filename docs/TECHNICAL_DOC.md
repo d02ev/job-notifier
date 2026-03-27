@@ -13,8 +13,8 @@ supabase/
       index.ts
       deno.json
       lib/
-        auth.ts
         database.ts
+        errors.ts
         notification.ts
         types.ts
 ```
@@ -24,11 +24,10 @@ supabase/
 When `notifier` is invoked it:
 
 1. reads the required environment variables
-2. authenticates against `portfolio-api`
-3. creates a Supabase client with the service role key
-4. fetches the latest row from `resume_jobs`, ordered by `updated_at DESC`
-5. builds a notification body from the job status
-6. sends the request to the notification API
+2. creates a Supabase client with the service role key
+3. fetches the latest row from `resume_jobs`, ordered by `updated_at DESC`
+4. builds a notification body from the job status
+5. sends the request to the notification API using `X-Api-Key`
 
 The function returns `OK` with status `200` on success.
 
@@ -42,11 +41,11 @@ Behavior implemented there:
 
 - handles `OPTIONS` requests for CORS
 - validates required env vars
-- calls the auth helper
 - calls the database helper
 - builds the outgoing request body
 - sends the notification
-- maps common failures into `401`, `403`, or `500`
+- emits structured logs with a per-request `requestId`
+- maps failures into the upstream status code when available, otherwise `500`
 
 ## Supabase Dependency
 
@@ -108,9 +107,8 @@ The function maps `resume_jobs.status` into the outgoing JSON body sent to `port
 
 ## API Calls
 
-The function performs two outbound HTTP calls:
+The function performs one outbound HTTP call:
 
-- `POST {API_BASE_URL}/auth/login`
 - `POST {API_BASE_URL}/notification/send`
 
 From the current code, `API_BASE_URL` should usually be the API root that already includes `/api`, for example:
@@ -125,8 +123,7 @@ Provide these values through an env file such as `.env.local`:
 
 ```bash
 API_BASE_URL=http://localhost:5000/api
-API_AUTH_USERNAME=service-account-username
-API_AUTH_PASSWORD=service-account-password
+API_KEY=your-backend-api-key
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
@@ -134,8 +131,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 Purpose of each variable:
 
 - `API_BASE_URL`: base URL for `portfolio-api`
-- `API_AUTH_USERNAME`: username used to obtain an access token
-- `API_AUTH_PASSWORD`: password used to obtain an access token
+- `API_KEY`: API key sent as `X-Api-Key` for notification requests
 - `SUPABASE_URL`: Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY`: service key used to query `resume_jobs`
 
@@ -147,7 +143,7 @@ Prerequisites:
 
 - Supabase CLI
 - access to the target Supabase project
-- valid credentials for `portfolio-api`
+- valid `API_KEY` for `portfolio-api`
 
 Serve locally from the repository root:
 
@@ -179,5 +175,6 @@ Make sure the deployed Supabase project also has the required environment variab
 - It always fetches the latest row from `resume_jobs`.
 - This means correctness depends on updates arriving in a way that makes “latest updated row” the intended record.
 - Notification delivery errors propagate as function failures.
-- Authentication failures against `portfolio-api` surface as `401`.
+- Notification API failures propagate the upstream HTTP status code.
+- Logs are emitted in structured JSON with `requestId`, `stage`, and `event` for Supabase debugging.
 - CORS is enabled for browser-style preflight handling.

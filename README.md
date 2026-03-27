@@ -34,10 +34,9 @@ This repo exists to keep that process visible:
 
 At a high level, the function:
 
-- authenticates with `portfolio-api`
 - reads the latest resume job from Supabase
 - maps the job status into a notification payload
-- forwards that payload to the notification endpoint
+- forwards that payload to the notification endpoint with `X-Api-Key`
 
 ## Quickstart
 
